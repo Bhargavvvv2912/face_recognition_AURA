@@ -1,0 +1,6 @@
+face_recognition_models
+Click
+dlib
+numpy
+Pillow
+scipy

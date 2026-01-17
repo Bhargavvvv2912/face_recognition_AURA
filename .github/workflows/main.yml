@@ -1,24 +1,76 @@
-name: CI
-on: push
+name: Autonomous Dependency Updater for CycleGAN
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 */3 * *' # Run every 3 days
+
 jobs:
-  build:
+  update-dependencies:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: [3.8, 3.9, "3.10"]
+    
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+
     steps:
-    - name: Checkout
-      uses: actions/checkout@v2
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v1
-      with:
-        python-version: ${{ matrix.python-version }}
-    - name: Install dependencies
-      run: |
-        pip install setuptools wheel
-        pip install .
-        pip install tox-gh-actions
-    - name: Check package setup
-      run: python setup.py check
-    - name: Test
-      run: tox
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # --- ADD THIS STEP TO FIX "NO SPACE LEFT" ---
+      - name: Free Disk Space (Ubuntu Runner)
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+      # --------------------------------------------
+        
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Agent Dependencies
+        run: |
+          python -m pip install google-genai google-api-core pypi-simple packaging pip-tools
+
+      - name: Run the Autonomous Agent
+        # -u forces unbuffered output. This ensures you see "Downloading..." logs 
+        # immediately instead of waiting 10 minutes for the buffer to flush.
+        run: python -u dependency_agent.py
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+      - name: Cleanup Agent Artifacts
+        run: |
+          # Remove all temporary venvs created by AURA so they don't get committed
+          rm -rf temp_venv final_venv bootstrap_venv temp_pip_check initial_check_venv temp_co_res_venv
+      
+      - name: Commit and push changes if any
+        run: |
+          git config --global user.name 'AURA Dependency Agent'
+          git config --global user.email 'aura-agent@users.noreply.github.com'
+          
+          TARGET_FILE="requirements.txt"
+          
+          # 1. Stage the requirements file
+          git add $TARGET_FILE
+          
+          # 2. Check if anything was actually staged (i.e., did the file change?)
+          if git diff --staged --quiet; then
+            echo "No changes detected in requirements.txt. Skipping commit."
+            exit 0
+          fi
+          
+          echo "Dependencies have changed. Committing and pushing..."
+          
+          COMMIT_BODY="Automated dependency updates via AURA."
+          if [ -f metrics_output.txt ]; then
+            COMMIT_BODY=$(cat metrics_output.txt)
+          fi
+          
+          git commit -m "chore(deps): Autonomously manage CycleGAN dependencies [skip ci]" -m "$COMMIT_BODY"
+          
+          git push
