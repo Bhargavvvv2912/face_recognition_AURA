@@ -1,4 +1,4 @@
--e git+https://github.com/Bhargavvvv2912/face_recognition_AURA@5b610fbc37d21422a7f8a0c454b161aaf08d17a9#egg=face_recognition
+-e git+https://github.com/Bhargavvvv2912/face_recognition_AURA@b993174caea3a1389e9daa9e05dbda961eb987d2#egg=face_recognition
 click==8.3.1
 dlib==20.0.0
 face_recognition_models==0.3.0
